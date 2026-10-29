@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>CosmoPilot - Motorized Dobsonian Control</title>
+
+  <!-- PWA & Mobile Web App Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CosmoPilot">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0a0c10">
+  <meta name="description" content="Professional Mobile-First PWA for motorized Dobsonian GoTo telescope control via Web Bluetooth and ESP32">
+
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+
+  <!-- Fonts & Stylesheet -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- Night Mode Monochrome Red Overlay -->
+  <div id="night-mode-overlay"></div>
+
+  <!-- App Root with Dynamic Theme Background -->
+  <div id="app-root" class="bg-gold-nebula">
+    
+    <!-- Thin 3-Segment Top Status Bar (Bluetooth, Sync, Alignment) -->
+    <div class="top-status-bar" id="top-status-bar">
+      <div id="status-seg-bt" class="status-segment" title="Bluetooth"></div>
+      <div id="status-seg-sync" class="status-segment" title="Date/Time/Location Sync"></div>
+      <div id="status-seg-align" class="status-segment" title="Star Alignment"></div>
+    </div>
+
+    <!-- Controller Busy Indicator Banner -->
+    <div id="busy-banner" class="controller-busy-banner">
+      <span data-i18n="busy">Occupato</span>: <span id="busy-banner-text">Movimento telescopio in corso...</span>
+    </div>
+
+    <!-- Persistent Top Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <button id="btn-header-back" class="btn-header-back" style="display: none;">
+          <span class="header-glyph">‹</span>
+          <span data-i18n="back">Indietro</span>
+        </button>
+      </div>
+
+      <div class="header-center">
+        <span id="header-title" class="header-title">COSMOPILOT</span>
+      </div>
+
+      <div class="header-right">
+        <button id="btn-header-home" class="btn-header-home" title="Menu Principale" style="display: none;">
+          <span class="header-glyph">⌂</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Screens Container -->
+    <main class="app-views-container">
+
+      <!-- ================= 0. MAIN HOME MENU (Page 3) ================= -->
+      <section id="screen-home" class="view-screen home-menu-view active">
+        <div class="home-brand-block">
+          <h1 class="home-brand-title">COSMOPILOT</h1>
+          <p class="home-brand-subtitle" data-i18n="tagline">Controllo Dobson Motorizzato</p>
+        </div>
+
+        <div class="home-buttons-stack">
+          <button class="main-menu-btn" onclick="appRouter.navigate('goto-catalog')">
+            <span class="menu-btn-icon">★</span>
+            <span class="menu-btn-label" data-i18n="menuGoto">GoTo</span>
+          </button>
+
+          <button class="main-menu-btn" onclick="appRouter.navigate('calib-menu')">
+            <span class="menu-btn-icon">✪</span>
+            <span class="menu-btn-label" data-i18n="menuCalib">Calib</span>
+          </button>
+
+          <button class="main-menu-btn" onclick="appRouter.navigate('free-menu')">
+            <span class="menu-btn-icon">✥</span>
+            <span class="menu-btn-label" data-i18n="menuFree">Free</span>
+          </button>
+
+          <button class="main-menu-btn" onclick="appRouter.navigate('config-menu')">
+            <span class="menu-btn-icon">⚙</span>
+            <span class="menu-btn-label" data-i18n="menuConfig">Config</span>
+          </button>
+
+          <button class="main-menu-btn" onclick="appRouter.navigate('about-menu')">
+            <span class="menu-btn-icon">🕮</span>
+            <span class="menu-btn-label" data-i18n="menuAbout">About</span>
+          </button>
+        </div>
+
+        <div class="home-bt-shortcut">
+          <button id="btn-home-bt" class="bt-shortcut-pill" onclick="appRouter.navigate('config-bluetooth')">
+            <span>ᛒ</span>
+            <span id="home-bt-label" data-i18n="btShortcut">Bluetooth Setup</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ================= 1. GOTO SUB-VIEWS ================= -->
+
+      <!-- 1.1 Object Catalog (Page 15) -->
+      <section id="screen-goto-catalog" class="view-screen">
+        <div class="catalog-search-bar">
+          <input type="search" id="catalog-search-input" class="form-input flex-1" placeholder="Cerca oggetto..." data-i18n-placeholder="searchPlaceholder">
+          <button id="btn-open-filters" class="btn-outline" style="width: auto; padding: 0 14px;" title="Filtri">
+            <span>⚙</span>
+          </button>
+        </div>
+
+        <!-- Catalog Categories Tabs -->
+        <div class="catalog-tabs">
+          <button class="catalog-tab-btn active" data-cat="messier" data-i18n="messier">Messier</button>
+          <button class="catalog-tab-btn" data-cat="stars" data-i18n="stars">Stelle</button>
+          <button class="catalog-tab-btn" data-cat="galaxies" data-i18n="galaxies">Galassie</button>
+          <button class="catalog-tab-btn" data-cat="nebulae" data-i18n="nebulae">Nebulose</button>
+          <button class="catalog-tab-btn" data-cat="solar" data-i18n="solarSystem">Sistema Solare</button>
+          <button class="catalog-tab-btn" data-cat="custom" data-i18n="custom">Personalizzati</button>
+        </div>
+
+        <!-- Solar System Dedicated Check Visibility Button -->
+        <div id="solar-visibility-banner" class="glass-card" style="display: none; padding: 12px; margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 13px; font-weight: 600;" data-i18n="checkVisibility">Verifica Visibilità</span>
+            <button id="btn-solar-check-vis" class="btn-gold" style="width: auto; height: 36px; padding: 0 14px; font-size: 13px;">
+              <span>Check</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Custom Target Add Button -->
+        <div id="custom-add-banner" style="display: none; margin-bottom: 12px;">
+          <button id="btn-add-custom-target" class="btn-gold">
+            <span>+</span> Aggiungi Oggetto Personalizzato
+          </button>
+        </div>
+
+        <!-- Catalog List Container -->
+        <div id="catalog-list-container" class="catalog-list"></div>
+
+        <!-- Secondary GoTo Functions Links -->
+        <div style="margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <button class="btn-outline" onclick="appRouter.navigate('goto-manual')">
+            <span data-i18n="manualRA_DEC">Manual RA/DEC</span>
+          </button>
+          <button class="btn-outline" onclick="appRouter.navigate('goto-random')">
+            <span data-i18n="randomTarget">Random Target</span>
+          </button>
+          <button class="btn-outline" onclick="appRouter.navigate('goto-tours')">
+            <span data-i18n="observingTours">Observing Tours</span>
+          </button>
+          <button class="btn-outline" onclick="appRouter.navigate('goto-game')">
+            <span data-i18n="game">Game</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 1.2 Manual RA/DEC (Page 17) -->
+      <section id="screen-goto-manual" class="view-screen">
+        <div class="glass-card">
+          <div class="card-title" data-i18n="manualRA_DEC">Manual RA/DEC</div>
+          <div class="card-desc">
+            Inserisci coordinate equatoriali. RA (ore 0-23, minuti 0-59, secondi 0-59), DEC (gradi -90..+90, con segno nei gradi).
+          </div>
+
+          <div style="font-size: 12px; font-weight: 700; color: var(--gold-light); margin-bottom: 6px;">ASCENSIONE RETTA (RA)</div>
+          <div class="coords-grid">
+            <div class="coord-cell">
+              <div class="coord-cell-label">Ore (0-23)</div>
+              <input type="number" id="manual-ra-h" class="coord-cell-input" min="0" max="23" value="0">
+            </div>
+            <div class="coord-cell">
+              <div class="coord-cell-label">Min (0-59)</div>
+              <input type="number" id="manual-ra-m" class="coord-cell-input" min="0" max="59" value="0">
+            </div>
+            <div class="coord-cell">
+              <div class="coord-cell-label">Sec (0-59)</div>
+              <input type="number" id="manual-ra-s" class="coord-cell-input" min="0" max="59" value="0">
+            </div>
+          </div>
+
+          <div style="font-size: 12px; font-weight: 700; color: var(--gold-light); margin-bottom: 6px;">DECLINAZIONE (DEC)</div>
+          <div class="coords-grid">
+            <div class="coord-cell">
+              <div class="coord-cell-label">Gradi (±90)</div>
+              <input type="text" id="manual-dec-d" class="coord-cell-input" value="0">
+            </div>
+            <div class="coord-cell">
+              <div class="coord-cell-label">Primi (0-59)</div>
+              <input type="number" id="manual-dec-m" class="coord-cell-input" min="0" max="59" value="0">
+            </div>
+            <div class="coord-cell">
+              <div class="coord-cell-label">Secondi (0-59)</div>
+              <input type="number" id="manual-dec-s" class="coord-cell-input" min="0" max="59" value="0">
+            </div>
+          </div>
+
+          <div id="manual-vis-badge-wrap" style="text-align: center; margin: 12px 0;">
+            <span id="manual-vis-badge" class="badge-vis visible">Visibilità in tempo reale: Calcolo...</span>
+          </div>
+
+          <button id="btn-send-manual-goto" class="btn-gold">
+            <span data-i18n="sendToTelescope">Invia al Telescopio</span>
+          </button>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-outline flex-1" onclick="appRouter.navigate('free-analog')">Scope Joystick</button>
+          <button class="btn-outline flex-1" onclick="appRouter.navigate('free-app')">App Joystick</button>
+        </div>
+      </section>
+
+      <!-- 1.3 Random Target (Page 17) -->
+      <section id="screen-goto-random" class="view-screen">
+        <div class="glass-card" style="text-align: center;">
+          <div class="card-title" style="justify-content: center;" data-i18n="randomTarget">Bersaglio Casuale</div>
+          <div class="card-desc">Suggerisce un oggetto celeste visibile sopra i 10° calcolato sulla posizione attuale.</div>
+
+          <div style="margin: 20px 0;">
+            <div id="random-target-name" style="font-size: 20px; font-weight: 700; color: var(--gold-light); margin-bottom: 6px;">---</div>
+            <div id="random-target-sub" style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">---</div>
+            <div id="random-target-coords" style="font-family: monospace; font-size: 14px; margin-bottom: 12px;">---</div>
+            <span id="random-target-badge" class="badge-vis visible">Visibile</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button id="btn-next-random" class="btn-outline">
+              <span>↻</span> Prossimo Bersaglio
+            </button>
+            <button id="btn-send-random" class="btn-gold">
+              <span data-i18n="sendToTelescope">Invia al Telescopio</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 1.4 Observing Tours Menu (Page 19-20) -->
+      <section id="screen-goto-tours" class="view-screen">
+        <div class="glass-card">
+          <div class="card-title" data-i18n="observingTours">Tour Osservativi</div>
+          <div class="card-desc">Pianifica una sessione guidata (fino a 30 oggetti, da 30 min a 6 ore) e salvala sul telefono (fino a 10 tour).</div>
+          <button class="btn-gold" onclick="appRouter.navigate('goto-plan-tour')">
+            <span>+</span> <span data-i18n="planTour">Pianifica Nuovo Tour</span>
+          </button>
+        </div>
+
+        <div style="font-size: 14px; font-weight: 700; color: var(--gold-light); margin-bottom: 10px;">I Tuoi Tour Salvati</div>
+        <div id="saved-tours-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
+      </section>
+
+      <!-- 1.5 Plan Tour Wizard (Page 19) -->
+      <section id="screen-goto-plan-tour" class="view-screen">
+        <!-- Step 1: Session Settings -->
+        <div id="plan-step-1" class="glass-card">
+          <div class="card-title">Passo 1 di 3: Sessione e Durata</div>
+          
+          <div class="form-group">
+            <label class="form-label" data-i18n="planningDate">Data di pianificazione</label>
+            <input type="date" id="plan-date" class="form-input">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Ora di Inizio</label>
+            <input type="time" id="plan-time" class="form-input">
+          </div>
+
+          <div class="form-group slider-group">
+            <div class="slider-header">
+              <span data-i18n="duration">Durata Sessione</span>
+              <span id="plan-duration-val" style="color: var(--gold-light);">2.0 ore</span>
+            </div>
+            <input type="range" id="plan-duration" class="custom-range" min="0.5" max="6.0" step="0.5" value="2.0">
+          </div>
+
+          <button class="btn-gold mt-2" onclick="toursWorkflow.goToStep(2)">
+            Avanti: Scegli Oggetti
+          </button>
+        </div>
+
+        <!-- Step 2: Choose Objects -->
+        <div id="plan-step-2" class="glass-card" style="display: none;">
+          <div class="card-title">Passo 2 di 3: Seleziona Bersagli (<span id="plan-selected-count">0</span>/30)</div>
+          
+          <div class="catalog-search-bar">
+            <input type="search" id="plan-search-input" class="form-input flex-1" placeholder="Filtra per nome...">
+          </div>
+
+          <div id="plan-objects-list" style="max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;"></div>
+
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-outline flex-1" onclick="toursWorkflow.goToStep(1)">Indietro</button>
+            <button class="btn-gold flex-1" onclick="toursWorkflow.goToStep(3)">Rivedi e Salva</button>
+          </div>
+        </div>
+
+        <!-- Step 3: Review & Reorder -->
+        <div id="plan-step-3" class="glass-card" style="display: none;">
+          <div class="card-title">Passo 3 di 3: Rivedi Ordine e Salva</div>
+          
+          <div class="form-group">
+            <label class="form-label" data-i18n="tourName">Nome del Tour</label>
+            <input type="text" id="plan-tour-name" class="form-input" placeholder="es. Autumn Highlights">
+          </div>
+
+          <div id="plan-review-list" style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;"></div>
+
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-outline flex-1" onclick="toursWorkflow.goToStep(2)">Indietro</button>
+            <button class="btn-gold flex-1" onclick="toursWorkflow.saveTour()">Salva Tour</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 1.6 Observe Saved Tour (Page 20) -->
+      <section id="screen-goto-observe-tour" class="view-screen">
+        <div class="glass-card" style="text-align: center;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span id="observe-tour-title" style="font-size: 16px; font-weight: 700; color: var(--gold-light);">Tour</span>
+            <button class="btn-outline" style="width: auto; height: 32px; padding: 0 10px; font-size: 12px;" onclick="toursWorkflow.endActiveTour()">End Tour</button>
+          </div>
+
+          <div id="observe-object-photo" style="width: 100%; height: 160px; background: rgba(0,0,0,0.6); border-radius: 12px; margin-bottom: 14px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(245, 158, 11, 0.2);">
+            <span style="font-size: 48px;">🌌</span>
+          </div>
+
+          <div id="observe-object-name" style="font-size: 20px; font-weight: 700; color: var(--text-main); margin-bottom: 4px;">---</div>
+          <div id="observe-object-cat" style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">---</div>
+          <div id="observe-object-coords" style="font-family: monospace; font-size: 13px; margin-bottom: 12px;">---</div>
+          <span id="observe-object-vis" class="badge-vis visible">Visibile</span>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin: 16px 0;">
+            <button id="btn-observe-prev" class="btn-outline" style="width: auto; padding: 0 16px;">‹ Prev</button>
+            <span id="observe-step-indicator" style="font-size: 13px; font-weight: 700; color: var(--gold-light);">Oggetto 1 di 5</span>
+            <button id="btn-observe-next" class="btn-outline" style="width: auto; padding: 0 16px;">Next ›</button>
+          </div>
+
+          <button id="btn-observe-goto" class="btn-gold mb-2">
+            <span>🔭</span> <span data-i18n="sendToTelescope">Punta al Telescopio</span>
+          </button>
+
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-outline flex-1" onclick="appRouter.navigate('free-analog')">Scope Joystick</button>
+            <button class="btn-outline flex-1" onclick="appRouter.navigate('free-app')">App Joystick</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 1.7 Object Identification Game (Page 21) -->
+      <section id="screen-goto-game" class="view-screen">
+        <div class="game-score-card">
+          <div>
+            <div style="font-size: 11px; color: var(--text-muted);" data-i18n="gameScore">PUNTEGGIO</div>
+            <div id="game-score-display" class="game-score-val">50</div>
+          </div>
+          <div>
+            <div style="font-size: 11px; color: var(--text-muted);" data-i18n="gameStreak">SERIE</div>
+            <div id="game-streak-display" class="game-streak-val">🔥 0</div>
+          </div>
+          <button class="btn-outline" style="width: auto; height: 32px; font-size: 12px;" onclick="gameWorkflow.endGame()">
+            <span data-i18n="endGame">Termina</span>
+          </button>
+        </div>
+
+        <div class="game-question-title" data-i18n="gameTitle">
+          Dove sta puntando il telescopio?
+        </div>
+
+        <!-- Manual Centering & Refresh Shortcuts (Page 21) -->
+        <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+          <button class="btn-outline flex-1" onclick="appRouter.navigate('free-analog')">Scope</button>
+          <button class="btn-outline" style="width: 48px;" onclick="gameWorkflow.reCenter()" title="Re-punta">↻</button>
+          <button class="btn-outline flex-1" onclick="appRouter.navigate('free-app')">App</button>
+        </div>
+
+        <!-- 3 Multiple Choice Options -->
+        <div class="game-options-stack" id="game-options-container">
+          <button class="game-opt-btn" onclick="gameWorkflow.selectAnswer(0)">Opzione 1</button>
+          <button class="game-opt-btn" onclick="gameWorkflow.selectAnswer(1)">Opzione 2</button>
+          <button class="game-opt-btn" onclick="gameWorkflow.selectAnswer(2)">Opzione 3</button>
+        </div>
+
+        <!-- Lifelines: 50/50, Show Mag, Skip -->
+        <div class="game-lifelines-row">
+          <button id="btn-game-5050" class="game-lifeline-btn" onclick="gameWorkflow.use5050()">
+            <span>½</span> <span id="label-game-5050">50/50 (5)</span>
+          </button>
+          <button id="btn-game-show-mag" class="game-lifeline-btn" onclick="gameWorkflow.useShowMag()">
+            <span>👁</span> <span id="label-game-mag">Mostra Mag</span>
+          </button>
+          <button id="btn-game-skip" class="game-lifeline-btn" onclick="gameWorkflow.useSkip()">
+            <span>↷</span> <span id="label-game-skip">Salta (3)</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ================= 2. CALIB SUB-VIEWS ================= -->
+
+      <!-- 2.1 Calib Main Menu (Page 10, 11, 12) -->
+      <section id="screen-calib-menu" class="view-screen">
+        <!-- Recommended Auto Sync Card (Page 10) -->
+        <div class="glass-card">
+          <div class="card-title" data-i18n="autoSync">Auto Sync (GPS & Ora)</div>
+          <div class="card-desc" data-i18n="autoSyncDesc">
+            Sincronizza ora UTC e coordinate GPS dello smartphone con un solo tocco.
+          </div>
+          <button id="btn-auto-sync" class="btn-gold">
+            <span>⚡</span> <span data-i18n="autoSync">Esegui Auto Sync</span>
+          </button>
+        </div>
+
+        <!-- Manual Calendar Alternative -->
+        <div class="glass-card">
+          <div class="card-title" data-i18n="calendar">Calendario Manuale</div>
+          <div class="card-desc">Imposta manualmente data UTC, ora UTC o seleziona un segnalibro posizione.</div>
+          <button class="btn-outline" onclick="appRouter.navigate('calib-calendar')">
+            <span>📅</span> Apri Calendario Manuale
+          </button>
+        </div>
+
+        <!-- 1-Star Alignment -->
+        <div class="glass-card">
+          <div class="card-title" data-i18n="oneStarAlign">Allineamento a 1 Stella</div>
+          <div class="card-desc">Allinea il telescopio su un astro luminoso per calibrare l'offset locale di puntamento.</div>
+          <button class="btn-outline" onclick="appRouter.navigate('calib-1star')">
+            <span>★</span> <span data-i18n="startCalibration">Avvia Allineamento 1 Stella</span>
+          </button>
+        </div>
+
+        <!-- 2-Star Alignment -->
+        <div class="glass-card">
+          <div class="card-title" data-i18n="twoStarAlign">Allineamento a 2 Stelle</div>
+          <div class="card-desc">Allineamento di precisione a due stelle con puntamento automatico verso la seconda stella.</div>
+          <button class="btn-outline" onclick="appRouter.navigate('calib-2star')">
+            <span>★★</span> <span data-i18n="startCalibration">Avvia Allineamento 2 Stelle</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 2.2 Manual Calendar (Page 10) -->
+      <section id="screen-calib-calendar" class="view-screen">
+        <div class="glass-card">
+          <div class="card-title" data-i18n="setTime">Imposta Ora (UTC)</div>
+          <div class="card-desc">L'ora deve essere espressa in formato UTC a 24 ore.</div>
+          <div class="coords-grid">
+            <div class="coord-cell">
+              <div class="coord-cell-label">Ore (0-23)</div>
+              <input type="number" id="cal-time-h" class="coord-cell-input" min="0" max="23">
+            </div>
+            <div class="coord-cell">
+              <div class="coord-cell-label">Min (0-59)</div>
+              <input type="number" id="cal-time-m" class="coord-cell-input" min="0" max="59">
+            </div>
+            <div class="coord-cell">
+              <div class="coord-cell-label">Sec (0-59)</div>
+              <input type="number" id="cal-time-s" class="coord-cell-input" min="0" max="59">
+            </div>
+          </div>
+          <button id="btn-send-cal-time" class="btn-gold">Invia Ora UTC</button>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title" data-i18n="setDate">Imposta Data (UTC)</div>
+          <div class="coords-grid">
+            <div class="coord-cell">
+              <div class="coord-cell-label">Anno</div>
+              <input type="number" id="cal-date-y" class="coord-cell-input" value="2026">
+            </div>
+            <div class="coord-cell">
+              <div class="coord-cell-label">Mese (1-12)</div>
+              <input type="number" id="cal-date-m" class="coord-cell-input" min="1" max="12" value="10">
+            </div>
+            <div class="coord-cell">
+              <div class="coord-cell-label">Giorno (1-31)</div>
+              <input type="number" id="cal-date-d" class="coord-cell-input" min="1" max="31" value="29">
+            </div>
+          </div>
+          <button id="btn-send-cal-date" class="btn-gold">Invia Data UTC</button>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title" data-i18n="setLocation">Imposta Posizione</div>
+          <div class="form-group">
+            <label class="form-label">Latitudine (±90°)</label>
+            <input type="number" step="0.0001" id="cal-loc-lat" class="form-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Longitudine (±180°)</label>
+            <input type="number" step="0.0001" id="cal-loc-lon" class="form-input">
+          </div>
+          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <button id="btn-cal-gps" class="btn-outline flex-1">GPS Telefono</button>
+            <button id="btn-cal-bookmarks" class="btn-outline flex-1">Segnalibri</button>
+          </div>
+          <button id="btn-send-cal-loc" class="btn-gold">Invia Posizione</button>
+        </div>
+      </section>
+
+      <!-- 2.3 1-Star Alignment Wizard (Page 11) -->
+      <section id="screen-calib-1star" class="view-screen">
+        <div id="align-1star-step-1" class="glass-card">
+          <div class="card-title" data-i18n="oneStarAlign">Allineamento a 1 Stella</div>
+          <div class="card-desc">
+            Seleziona una stella visibile ad occhio nudo (magnitudine ≤ 4.0) nella porzione di cielo che intendi osservare.
+          </div>
+          <button id="btn-1star-start" class="btn-gold">
+            <span data-i18n="startCalibration">Inizia Calibrazione</span>
+          </button>
+        </div>
+
+        <div id="align-1star-step-2" class="glass-card" style="display: none;">
+          <div class="card-title">Seleziona Stella di Riferimento</div>
+          <div id="align-1star-list" style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;"></div>
+        </div>
+
+        <div id="align-1star-step-3" class="glass-card" style="display: none; text-align: center;">
+          <div class="card-title" style="justify-content: center;">Allinea a <span id="align-1star-target-name">---</span></div>
+          <div class="card-desc" data-i18n="centerTargetPrompt">
+            Punta e centra con precisione l'astro selezionato al centro dell'oculare.
+          </div>
+
+          <div id="align-1star-target-coords" style="font-family: monospace; font-size: 14px; margin-bottom: 14px;">---</div>
+
+          <div class="form-label" data-i18n="movementMethod">Metodo di movimento del telescopio:</div>
+          <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            <button class="btn-outline flex-1" onclick="appRouter.navigate('free-analog')">Scope</button>
+            <button class="btn-outline flex-1" onclick="appRouter.navigate('free-app')">App</button>
+          </div>
+
+          <button id="btn-1star-finish" class="btn-gold">
+            <span data-i18n="finishCalibration">Termina Calibrazione</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 2.4 2-Star Alignment Wizard (Page 12) -->
+      <section id="screen-calib-2star" class="view-screen">
+        <div id="align-2star-card" class="glass-card">
+          <div class="card-title" data-i18n="twoStarAlign">Allineamento a 2 Stelle</div>
+          <div id="align-2star-desc" class="card-desc">
+            Scegli due stelle ben separate. Centra la prima stella, poi il telescopio punterà automaticamente verso la seconda.
+          </div>
+
+          <div id="align-2star-stage-container">
+            <button id="btn-2star-start" class="btn-gold">
+              <span data-i18n="startCalibration">Inizia Calibrazione a 2 Stelle</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 3. FREE SUB-VIEWS ================= -->
+
+      <!-- 3.1 Free Menu (Page 13, 14) -->
+      <section id="screen-free-menu" class="view-screen">
+        <div class="glass-card">
+          <div class="card-title" data-i18n="freeAppTitle">App Joystick</div>
+          <div class="card-desc">Controlla il movimento del telescopio tramite il pad virtuale a 8 direzioni dell'app.</div>
+          <button class="btn-gold" onclick="appRouter.navigate('free-app')">
+            <span>✥</span> Apri App Joystick
+          </button>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title" data-i18n="freeAnalogTitle">Joystick Fisico (Telescope Joystick)</div>
+          <div class="card-desc">Abilita il controllo manuale tramite il joystick analogico cablato al controller.</div>
+          <button class="btn-outline" onclick="appRouter.navigate('free-analog')">
+            <span>🕹</span> Apri Scope Joystick
+          </button>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title" data-i18n="freeHandTitle">Movimento a Mano (Hand Move)</div>
+          <div class="card-desc">Rilascia l'alimentazione dei motori per consentire la movimentazione manuale a spinta del telescopio.</div>
+          <button class="btn-outline" onclick="appRouter.navigate('free-hand')">
+            <span>✋</span> Apri Hand Move
+          </button>
+        </div>
+      </section>
+
+      <!-- 3.2 App Joystick Touch Pad (Page 13) -->
+      <section id="screen-free-app" class="view-screen">
+        <div class="joystick-container">
+          <!-- Real-Time RA/DEC Telemetry Box -->
+          <div class="telemetry-display-panel">
+            <div class="telemetry-row">
+              <span class="telemetry-label">RA:</span>
+              <span id="joy-ra-display" class="telemetry-value">00h 00m 00s</span>
+            </div>
+            <div class="telemetry-row">
+              <span class="telemetry-label">DEC:</span>
+              <span id="joy-dec-display" class="telemetry-value">+00° 00' 00"</span>
+            </div>
+          </div>
+
+          <!-- Speed Slider (1-10) -->
+          <div class="slider-group">
+            <div class="slider-header">
+              <span data-i18n="motorSpeed">Velocità Motori</span>
+              <span id="joy-speed-label" style="color: var(--gold-light);">Livello: 5</span>
+            </div>
+            <input type="range" id="joy-speed-slider" class="custom-range" min="1" max="10" value="5">
+          </div>
+
+          <!-- Action buttons: SkyBox Assist & Tracking -->
+          <div class="joystick-toolbar">
+            <button id="btn-joy-skybox" class="btn-outline flex-1" style="font-size: 12px;">
+              <span data-i18n="skyBoxAssist">SkyBox Assist</span>
+            </button>
+            <button id="btn-joy-tracking" class="btn-gold flex-1" style="font-size: 12px;">
+              <span id="label-joy-tracking" data-i18n="startTracking">Avvia Inseguimento</span>
+            </button>
+          </div>
+
+          <!-- Axis Invert Switches -->
+          <div class="joystick-toolbar" style="justify-content: space-around;">
+            <label class="toggle-switch-wrap">
+              <input type="checkbox" id="chk-invert-ud">
+              <span data-i18n="invertUD">Invert U/D</span>
+            </label>
+            <label class="toggle-switch-wrap">
+              <input type="checkbox" id="chk-invert-rl">
+              <span data-i18n="invertRL">Invert R/L</span>
+            </label>
+          </div>
+
+          <!-- 8-Way Directional Touch Pad -->
+          <div class="dpad-matrix" id="app-dpad">
+            <button class="dpad-btn" data-dir="ULEFT">↖</button>
+            <button class="dpad-btn" data-dir="UP">↑</button>
+            <button class="dpad-btn" data-dir="URIGHT">↗</button>
+
+            <button class="dpad-btn" data-dir="LEFT">←</button>
+            <div class="dpad-center-lock" id="dpad-center-lock" title="Tieni premuto e scorri verso l'alto per bloccare">
+              <span id="lock-icon">🔓</span>
+              <span class="lock-text">Lock</span>
+            </div>
+            <button class="dpad-btn" data-dir="RIGHT">→</button>
+
+            <button class="dpad-btn" data-dir="DLEFT">↙</button>
+            <button class="dpad-btn" data-dir="DOWN">↓</button>
+            <button class="dpad-btn" data-dir="DRIGHT">↘</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3.3 Analog Scope Joystick Screen (Page 14, 18) -->
+      <section id="screen-free-analog" class="view-screen">
+        <div class="glass-card" style="text-align: center;">
+          <div class="card-title" style="justify-content: center;" data-i18n="freeAnalogTitle">Telescope Joystick</div>
+          <div class="card-desc">
+            Usa la levetta analogica fisica collegata alla scheda per muovere il telescopio in qualsiasi direzione.
+          </div>
+
+          <div class="telemetry-display-panel mb-4" style="margin: 0 auto 16px auto;">
+            <div class="telemetry-row">
+              <span class="telemetry-label">RA:</span>
+              <span id="analog-ra-display" class="telemetry-value">00h 00m 00s</span>
+            </div>
+            <div class="telemetry-row">
+              <span class="telemetry-label">DEC:</span>
+              <span id="analog-dec-display" class="telemetry-value">+00° 00' 00"</span>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            <button id="btn-analog-skybox" class="btn-outline flex-1" style="font-size: 13px;">SkyBox Assist</button>
+            <button id="btn-analog-tracking" class="btn-gold flex-1" style="font-size: 13px;">Avvia Inseguimento</button>
+          </div>
+
+          <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+            Riporta la levetta al centro prima di avviare l'inseguimento siderale continuo o SkyBox Assist.
+          </div>
+        </div>
+      </section>
+
+      <!-- 3.4 Hand Move Screen (Page 14) -->
+      <section id="screen-free-hand" class="view-screen">
+        <div class="glass-card" style="text-align: center;">
+          <div class="card-title" style="justify-content: center;" data-i18n="freeHandTitle">Hand Move</div>
+          
+          <div class="card-desc">
+            I motori passo-passo possono essere rilasciati premendo il pulsante sottostante, permettendo al telescopio di muoversi liberamente a mano.
+          </div>
+
+          <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 14px; margin-bottom: 20px; text-align: left;">
+            <div style="color: #fca5a5; font-size: 13px; font-weight: 600; margin-bottom: 6px;">
+              ⚠️ A seconda del design meccanico del telescopio, il movimento manuale potrebbe non essere possibile se il drive rimane bloccato.
+            </div>
+            <div style="color: #fca5a5; font-size: 13px;">
+              ⚠️ Importante: una volta disabilitati, la calibrazione e l'allineamento precedente non saranno più validi. Sarà necessario riallineare prima di usare GoTo o tracking.
+            </div>
+          </div>
+
+          <button id="btn-toggle-steppers" class="btn-gold btn-danger" style="height: 52px;">
+            <span id="label-toggle-steppers" data-i18n="pressToDisable">Premi per Rilasciare i Motori</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ================= 4. CONFIG SUB-VIEWS ================= -->
+
+      <!-- 4.1 Config Menu (Page 4, 5, 22, 23) -->
+      <section id="screen-config-menu" class="view-screen">
+        <div class="glass-card">
+          <div class="card-title" data-i18n="bluetoothSetup">Bluetooth Setup</div>
+          <div class="card-desc">Scansione, connessione e gestione del controller ESP32 CosmoPilot.</div>
+          <button class="btn-gold" onclick="appRouter.navigate('config-bluetooth')">
+            <span>ᛒ</span> Apri Connessione Bluetooth
+          </button>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title" data-i18n="telescopeCalibrations">Calibrazioni Hardware Telescopio</div>
+          <div class="card-desc">Rapporti di riduzione, verifica direzioni, backlash e joystick analogico.</div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <button class="btn-outline" onclick="appRouter.navigate('config-gear-ratios')">Rapporti di Riduzione (Gear Ratios)</button>
+            <button class="btn-outline" onclick="appRouter.navigate('config-direction-setup')">Verifica Direzioni Motori (Direction Setup)</button>
+            <button class="btn-outline" onclick="appRouter.navigate('config-gear-check')">Test Rapporti di Riduzione (Gear Ratio Check)</button>
+            <button class="btn-outline" onclick="appRouter.navigate('config-backlash')">Compensazione Backlash</button>
+            <button class="btn-outline" onclick="appRouter.navigate('config-joystick-calib')">Calibrazione Joystick Fisico</button>
+            <button class="btn-outline" onclick="appRouter.navigate('config-factory-reset')">Ripristino di Fabbrica (Factory Reset)</button>
+          </div>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title" data-i18n="otherSettings">Altre Impostazioni Controller</div>
+          <div class="card-desc">Velocità massima, refresh tracking, SkyBox assist, display e standalone.</div>
+          <button class="btn-outline" onclick="appRouter.navigate('config-other')">
+            <span>⚙</span> Altre Impostazioni Telescopio
+          </button>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title" data-i18n="showSettings">Parametri Salavati sul Controller</div>
+          <div class="card-desc">Interroga la scheda per leggere i rapporti e la calibrazione salvati nella flash.</div>
+          <button class="btn-outline" onclick="appRouter.navigate('config-show-settings')">
+            <span>ℹ</span> Leggi Impostazioni Controller
+          </button>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title" data-i18n="appPreferences">Preferenze Applicazione</div>
+          <div class="card-desc">Lingua, temi spaziali, modalità notturna a filtro rosso e gesture di blocco.</div>
+          <button class="btn-gold" onclick="appRouter.navigate('config-preferences')">
+            <span>🎨</span> Personalizza Applicazione
+          </button>
+        </div>
+      </section>
+
+      <!-- 4.2 Bluetooth Setup Screen (Page 4) -->
+      <section id="screen-config-bluetooth" class="view-screen">
+        <div class="glass-card" style="text-align: center;">
+          <div class="card-title" style="justify-content: center;" data-i18n="bluetoothSetup">Bluetooth Setup</div>
+          <div class="card-desc">
+            Accendi il controller ESP32 CosmoPilot e abilita il Bluetooth sul telefono.
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+            <button id="btn-ble-scan" class="btn-gold">
+              <span>🔍</span> <span data-i18n="startScan">Avvia Scansione</span>
+            </button>
+            <button id="btn-ble-disconnect" class="btn-outline btn-danger" style="display: none;">
+              Disconnetti Dispositivo
+            </button>
+          </div>
+
+          <div id="ble-device-info-card" class="glass-card" style="display: none; background: rgba(16, 185, 129, 0.15); border-color: var(--color-green);">
+            <div style="font-weight: 700; color: var(--color-green);" id="ble-connected-name">CosmoPilot Telescope</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Connesso via Web Bluetooth</div>
+          </div>
+
+          <!-- Simulator Mode Toggle -->
+          <div style="margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+            <div style="font-size: 13px; font-weight: 600; color: var(--gold-light); margin-bottom: 6px;">
+              Modalità Simulatore Hardware ESP32
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
+              Simula integralmente il telescopio e le risposte del firmware ESP32 se non hai la scheda fisica collegata.
+            </div>
+            <button id="btn-toggle-sim" class="btn-outline">
+              Attiva Simulatore Controller
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4.3 Gear Ratios Setup (Page 5) -->
+      <section id="screen-config-gear-ratios" class="view-screen">
+        <div class="glass-card">
+          <div class="card-title" data-i18n="gearRatio">Set Gear Ratio</div>
+          <div class="card-desc">
+            Inserisci il rapporto meccanico totale (giri motore per giro completo dell'asse). Entrambi gli assi AZ e ALT devono essere inviati insieme.
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" data-i18n="azRatio">Rapporto Asse AZ (orizzontale):</label>
+            <input type="number" step="0.1" id="input-gear-az" class="form-input" value="50.0">
+            <small id="gear-az-limit-hint" style="color: var(--text-muted); font-size: 11px;">Intervallo valido: 1.0 - 100.0</small>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" data-i18n="altRatio">Rapporto Asse ALT (verticale):</label>
+            <input type="number" step="0.1" id="input-gear-alt" class="form-input" value="50.0">
+            <small id="gear-alt-limit-hint" style="color: var(--text-muted); font-size: 11px;">Intervallo valido: 1.0 - 100.0</small>
+          </div>
+
+          <button id="btn-send-gear-ratios" class="btn-gold mt-2">
+            <span data-i18n="sendGearRatios">Invia Rapporti di Riduzione</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 4.4 Direction Setup Wizard (Page 6) -->
+      <section id="screen-config-direction-setup" class="view-screen">
+        <div class="glass-card" style="text-align: center;">
+          <div class="card-title" style="justify-content: center;" data-i18n="directionSetup">Direction Setup</div>
+          
+          <div id="dir-setup-intro" class="card-desc">
+            Posiziona il telescopio a circa 45° sopra l'orizzontale. Assicurati che il tubo possa muoversi liberamente in entrambi gli assi.
+          </div>
+
+          <div id="dir-step-1-ui">
+            <button id="btn-dir-start" class="btn-gold">
+              Avvia Verifica Direzioni
+            </button>
+          </div>
+
+          <!-- Question UP -->
+          <div id="dir-step-up-ui" style="display: none;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--gold-light); margin-bottom: 8px;">
+              Il telescopio si muoverà in ALTO di circa 5°.
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+              Osserva e conferma il movimento fisico.
+            </div>
+            <button id="btn-dir-move-up" class="btn-gold mb-4">Start Move Up</button>
+
+            <div id="dir-up-question" style="display: none;">
+              <div style="font-size: 15px; font-weight: 700; margin-bottom: 12px;">Il telescopio si è mosso verso l'ALTO?</div>
+              <div style="display: flex; gap: 10px;">
+                <button class="btn-gold flex-1" onclick="configWorkflow.answerDir('up', true)">Sì</button>
+                <button class="btn-outline flex-1" onclick="configWorkflow.answerDir('up', false)">No</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Question RIGHT -->
+          <div id="dir-step-right-ui" style="display: none;">
+            <div style="font-size: 15px; font-weight: 700; color: var(--gold-light); margin-bottom: 8px;">
+              Il telescopio si muoverà a DESTRA di circa 20°.
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+              Osserva e conferma il movimento fisico.
+            </div>
+            <button id="btn-dir-move-right" class="btn-gold mb-4">Start Move Right</button>
+
+            <div id="dir-right-question" style="display: none;">
+              <div style="font-size: 15px; font-weight: 700; margin-bottom: 12px;">Il telescopio si è mosso verso DESTRA?</div>
+              <div style="display: flex; gap: 10px;">
+                <button class="btn-gold flex-1" onclick="configWorkflow.answerDir('right', true)">Sì</button>
+                <button class="btn-outline flex-1" onclick="configWorkflow.answerDir('right', false)">No</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Complete confirmation -->
+          <div id="dir-step-complete" style="display: none;">
+            <div style="font-size: 32px; margin-bottom: 10px;">✓</div>
+            <div style="font-size: 16px; font-weight: 700; color: var(--color-green); margin-bottom: 6px;">
+              Calibrazione Direzioni Completata!
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+              Le impostazioni di polarità dei motori sono state salvate nella memoria flash del controller.
+            </div>
+            <button class="btn-gold" onclick="appRouter.navigate('config-menu')">Ritorna alle Impostazioni</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4.5 Gear Ratio Check (Page 7) -->
+      <section id="screen-config-gear-check" class="view-screen">
+        <div class="glass-card" style="text-align: center;">
+          <div class="card-title" style="justify-content: center;" data-i18n="gearRatioCheck">Gear Ratio Check</div>
+          <div class="card-desc">
+            Test di verifica temporizzata del rapporto meccanico calcolato su una corsa nota (0°-90° per ALT, 360° per AZ).
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+            <button id="btn-send-test-speed" class="btn-outline">
+              Invia Velocità di Test (4.0°/s)
+            </button>
+            <button id="btn-get-ratios-check" class="btn-outline">
+              Leggi Rapporti Salavati
+            </button>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+            <button id="btn-check-alt" class="btn-gold flex-1">Check ALT (90°)</button>
+            <button id="btn-check-az" class="btn-outline flex-1">Check AZ (360°)</button>
+          </div>
+
+          <!-- Hold Motion Button with Timer -->
+          <div style="margin: 20px 0;">
+            <button id="btn-hold-motion" class="btn-gold" style="height: 64px; font-size: 17px;">
+              Tieni Premuto per Muovere
+            </button>
+            <div id="gear-check-timer" style="font-family: monospace; font-size: 18px; margin-top: 10px;">Tempo: 0.00s</div>
+          </div>
+
+          <div id="gear-check-result" class="glass-card" style="display: none; background: rgba(245, 158, 11, 0.15);">
+            <div style="font-size: 13px; color: var(--text-muted);">Stima Rapporto (±5%):</div>
+            <div id="gear-check-calc-val" style="font-size: 20px; font-weight: 700; color: var(--gold-light);">---</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4.6 Backlash Compensation (Page 8) -->
+      <section id="screen-config-backlash" class="view-screen">
+        <div class="glass-card">
+          <div class="card-title" data-i18n="backlash">Compensazione Backlash</div>
+          <div class="card-desc">
+            Compensa il gioco meccanico degli ingranaggi all'inversione del moto. Inserisci il valore in arcosecondi (0 - 4000).
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">AZ Backlash (arcosecondi 0-4000):</label>
+            <input type="number" id="input-backlash-az" class="form-input" min="0" max="4000" value="120">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">ALT Backlash (arcosecondi 0-4000):</label>
+            <input type="number" id="input-backlash-alt" class="form-input" min="0" max="4000" value="120">
+          </div>
+
+          <button id="btn-send-backlash" class="btn-gold mt-2">
+            Invia Compensazione Backlash
+          </button>
+        </div>
+      </section>
+
+      <!-- 4.7 Physical Joystick Calibration (Page 9) -->
+      <section id="screen-config-joystick-calib" class="view-screen">
+        <div class="glass-card" style="text-align: center;">
+          <div class="card-title" style="justify-content: center;" data-i18n="joystickCalib">Calibrazione Joystick Fisico</div>
+          <div class="card-desc">
+            Insegna al controller la posizione neutra di riposo e la massima escursione del joystick analogico.
+          </div>
+
+          <div style="margin: 20px 0; display: flex; flex-direction: column; gap: 14px;">
+            <div>
+              <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 6px;">Passo 1: Posizione di Riposo (Idle)</div>
+              <button id="btn-calib-joy-idle" class="btn-gold">Calibrate Idle Position</button>
+              <div id="joy-idle-success" style="display: none; color: var(--color-green); font-size: 13px; font-weight: 600; margin-top: 6px;">
+                ✓ Idle calibration successful.
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 6px;">Passo 2: Movimento Massimo (10 secondi)</div>
+              <button id="btn-calib-joy-max" class="btn-gold" disabled>Start Max Movement</button>
+              <div id="joy-max-timer" style="font-family: monospace; font-size: 16px; margin-top: 6px;"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4.8 Factory Reset (Page 23) -->
+      <section id="screen-config-factory-reset" class="view-screen">
+        <div class="glass-card" style="text-align: center;">
+          <div class="card-title" style="justify-content: center; color: var(--color-red);" data-i18n="factoryReset">Ripristino di Fabbrica</div>
+          <div class="card-desc">
+            Resetta tutti i rapporti di trasmissione, le direzioni e i parametri della memoria flash del telescopio ai valori predefiniti di fabbrica.
+          </div>
+
+          <div style="margin: 30px 0;">
+            <button id="btn-factory-reset-hold" class="btn-gold btn-danger" style="height: 60px;">
+              Tieni Premuto 3 Secondi per Resettare
+            </button>
+            <div id="factory-reset-progress" style="font-size: 12px; margin-top: 8px; color: var(--color-red);"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4.9 Other Telescope Settings (Page 23) -->
+      <section id="screen-config-other" class="view-screen">
+        <div class="glass-card">
+          <div class="card-title" data-i18n="otherSettings">Other Telescope Settings</div>
+          <div class="card-desc">Seleziona con la spunta le sezioni che desideri aggiornare e premi Invia.</div>
+
+          <!-- Section 1: Tracking Refreshment -->
+          <div style="border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 14px; margin-bottom: 14px;">
+            <label style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <span style="font-weight: 700; color: var(--gold-light);">Set Tracking Refreshment</span>
+              <input type="checkbox" id="chk-sec-tracking" style="width: 18px; height: 18px;">
+            </label>
+            <select id="sel-tracking-refresh" class="form-input">
+              <option value="0.2">0.2 secondi</option>
+              <option value="0.5">0.5 secondi</option>
+              <option value="1">1 secondo</option>
+              <option value="3" selected>3 secondi (Consigliato)</option>
+              <option value="5">5 secondi</option>
+              <option value="10">10 secondi</option>
+              <option value="15">15 secondi</option>
+              <option value="20">20 secondi</option>
+              <option value="25">25 secondi</option>
+            </select>
+          </div>
+
+          <!-- Section 2: SkyBox Assist Settings -->
+          <div style="border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 14px; margin-bottom: 14px;">
+            <label style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <span style="font-weight: 700; color: var(--gold-light);">SkyBox Assist Settings</span>
+              <input type="checkbox" id="chk-sec-skybox" style="width: 18px; height: 18px;">
+            </label>
+            <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+              <select id="sel-skybox-mag" class="form-input flex-1">
+                <option value="low">Low (Passi larghi)</option>
+                <option value="medium" selected>Medium (Bilanciato)</option>
+                <option value="high">High (Passi fini)</option>
+              </select>
+              <select id="sel-skybox-speed" class="form-input flex-1">
+                <option value="slow">Slow</option>
+                <option value="normal" selected>Normal</option>
+                <option value="fast">Fast</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Section 3: Max Speed -->
+          <div style="border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 14px; margin-bottom: 14px;">
+            <label style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <span style="font-weight: 700; color: var(--gold-light);">Set Max Speed (2.5 - 7.0°/s)</span>
+              <input type="checkbox" id="chk-sec-speed" style="width: 18px; height: 18px;">
+            </label>
+            <input type="number" step="0.1" min="2.5" max="7.0" id="input-max-speed" class="form-input" value="4.0">
+          </div>
+
+          <!-- Section 4: Display Settings -->
+          <div style="border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 14px; margin-bottom: 14px;">
+            <label style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <span style="font-weight: 700; color: var(--gold-light);">Display Settings</span>
+              <input type="checkbox" id="chk-sec-display" style="width: 18px; height: 18px;">
+            </label>
+            <select id="sel-display-enable" class="form-input">
+              <option value="1">Schermo Attivo (ON)</option>
+              <option value="0">Schermo Disattivato (OFF)</option>
+            </select>
+          </div>
+
+          <!-- Section 5: Standalone Mode -->
+          <div style="margin-bottom: 14px;">
+            <label style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <span style="font-weight: 700; color: var(--gold-light);">Standalone Mode</span>
+              <input type="checkbox" id="chk-sec-standalone" style="width: 18px; height: 18px;">
+            </label>
+            <select id="sel-standalone-mode" class="form-input">
+              <option value="0">Disattivato (Usa App)</option>
+              <option value="1">Attivo (Joystick all'avvio)</option>
+            </select>
+          </div>
+
+          <button id="btn-send-other-settings" class="btn-gold">Invia Impostazioni Selezionate</button>
+        </div>
+      </section>
+
+      <!-- 4.10 Show Settings Readout (Page 23) -->
+      <section id="screen-config-show-settings" class="view-screen">
+        <div class="glass-card">
+          <div class="card-title" data-i18n="showSettings">Parametri Flash Controller</div>
+          <div class="card-desc">Premi il pulsante per richiedere i parametri memorizzati sulla scheda ESP32.</div>
+          <button id="btn-fetch-telescope-settings" class="btn-gold mb-4">Get Telescope Settings</button>
+
+          <div id="settings-readout-panel" style="font-size: 13px; display: flex; flex-direction: column; gap: 8px;">
+            <div class="telemetry-row"><span>Versione Firmware:</span><span id="readout-fw" class="telemetry-value">---</span></div>
+            <div class="telemetry-row"><span>Rapporto Asse AZ:</span><span id="readout-gear-az" class="telemetry-value">---</span></div>
+            <div class="telemetry-row"><span>Rapporto Asse ALT:</span><span id="readout-gear-alt" class="telemetry-value">---</span></div>
+            <div class="telemetry-row"><span>Data UTC Controller:</span><span id="readout-date" class="telemetry-value">---</span></div>
+            <div class="telemetry-row"><span>Ora UTC Controller:</span><span id="readout-time" class="telemetry-value">---</span></div>
+            <div class="telemetry-row"><span>Posizione GPS:</span><span id="readout-loc" class="telemetry-value">---</span></div>
+            <div class="telemetry-row"><span>Backlash (AZ / ALT):</span><span id="readout-backlash" class="telemetry-value">---</span></div>
+            <div class="telemetry-row"><span>Velocità Massima:</span><span id="readout-maxspeed" class="telemetry-value">---</span></div>
+            <div class="telemetry-row"><span>Intervallo Tracking:</span><span id="readout-refresh" class="telemetry-value">---</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4.11 App Preferences (Page 22) -->
+      <section id="screen-config-preferences" class="view-screen">
+        <!-- Language Selector -->
+        <div class="glass-card">
+          <div class="card-title" data-i18n="language">Lingua</div>
+          <select id="pref-language" class="form-input">
+            <option value="it">Italiano</option>
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="fr">Français</option>
+            <option value="pt">Português</option>
+          </select>
+        </div>
+
+        <!-- Background Scene Selector -->
+        <div class="glass-card">
+          <div class="card-title" data-i18n="background">Sfondo Schermata</div>
+          <div class="card-desc">Scegli tra 7 scene spaziali o importa la tua immagine (fino a 5 MB).</div>
+          
+          <select id="pref-background-select" class="form-input mb-2">
+            <option value="gold_nebula">Gold nebula (Default)</option>
+            <option value="lunar_horizon">Lunar horizon</option>
+            <option value="aurora_veil">Aurora veil</option>
+            <option value="midnight_blue">Midnight blue</option>
+            <option value="silent_rings">Silent rings</option>
+            <option value="original">Original</option>
+            <option value="stellar_dust">Stellar dust</option>
+            <option value="custom">Immagine Personalizzata</option>
+          </select>
+
+          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <button id="btn-preview-bg" class="btn-outline flex-1">Anteprima Schermo Intero</button>
+            <label class="btn-outline flex-1" style="margin: 0; cursor: pointer;">
+              Importa Foto
+              <input type="file" id="input-import-bg" accept="image/*" style="display: none;">
+            </label>
+          </div>
+          <button id="btn-remove-custom-bg" class="btn-outline btn-danger" style="display: none;">Rimuovi Immagine Custom</button>
+        </div>
+
+        <!-- Night Mode Red Filter -->
+        <div class="glass-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span class="card-title" style="margin-bottom: 0;" data-i18n="nightMode">Modalità Notturna</span>
+            <input type="checkbox" id="chk-night-mode" style="width: 20px; height: 20px;">
+          </div>
+          <div class="card-desc">Applica un filtro rosso monocromatico a tutto schermo per preservare l'adattamento visivo notturno.</div>
+          
+          <div class="slider-group">
+            <div class="slider-header">
+              <span data-i18n="nightIntensity">Intensità Filtro Rosso</span>
+              <span id="label-night-intensity">Livello 1 (Luminoso)</span>
+            </div>
+            <input type="range" id="slider-night-intensity" class="custom-range" min="1" max="5" value="1">
+          </div>
+        </div>
+
+        <!-- Other Preferences Toggles -->
+        <div class="glass-card">
+          <div class="card-title">Altre Preferenze</div>
+          
+          <label style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <span style="font-size: 13px;" data-i18n="autoReconnect">Riconnetti automaticamente al dispositivo Bluetooth</span>
+            <input type="checkbox" id="chk-pref-autoreconnect">
+          </label>
+
+          <label style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <span style="font-size: 13px;" data-i18n="enableStopGoto">Mostra popup di arresto GoTo durante il puntamento</span>
+            <input type="checkbox" id="chk-pref-stopgoto" checked>
+          </label>
+
+          <label style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <span style="font-size: 13px;" data-i18n="controlLockEnabled">Abilita blocco gestuale del joystick virtuale</span>
+            <input type="checkbox" id="chk-pref-controllock">
+          </label>
+
+          <label style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <span style="font-size: 13px;">Nascondi barre di sistema (Schermo Intero)</span>
+            <input type="checkbox" id="chk-pref-fullscreen">
+          </label>
+
+          <label style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-size: 13px;" data-i18n="allowExtendedRatios">Consenti rapporti di riduzione estesi fino a 200</span>
+            <input type="checkbox" id="chk-pref-extendedratios">
+          </label>
+        </div>
+      </section>
+
+      <!-- ================= 5. ABOUT SUB-VIEWS (Page 24) ================= -->
+      <section id="screen-about-menu" class="view-screen">
+        <!-- Solar Safety Warning Card (Page 24) -->
+        <div class="glass-card" style="background: rgba(239, 68, 68, 0.2); border-color: var(--color-red);">
+          <div class="card-title" style="color: #fca5a5;" data-i18n="solarWarningTitle">⚠️ AVVISO SICUREZZA SOLARE</div>
+          <div style="font-size: 13px; color: #fecaca; line-height: 1.5;" data-i18n="solarWarningText">
+            Non puntare MAI il telescopio verso il Sole senza un filtro solare a tutta apertura certificato e saldamente montato. Rischio di cecità permanente immediata!
+          </div>
+        </div>
+
+        <!-- Nightly Checklist (Page 24) -->
+        <div class="glass-card">
+          <div class="card-title" data-i18n="nightlyChecklist">Checklist Notturna</div>
+          <div style="font-size: 13px; color: var(--text-muted); display: flex; flex-direction: column; gap: 8px;">
+            <div data-i18n="check1">1. Posiziona il Dobson su un terreno stabile e livella la base.</div>
+            <div data-i18n="check2">2. Connetti lo smartphone al controller via Bluetooth.</div>
+            <div data-i18n="check3">3. Esegui Auto Sync per impostare ora UTC e coordinate GPS esatte.</div>
+            <div data-i18n="check4">4. Esegui l'allineamento a 1 stella (o 2 stelle) usando astri ben visibili.</div>
+            <div data-i18n="check5">5. Seleziona i tuoi bersagli, supervisiona il GoTo e avvia il tracking.</div>
+            <div data-i18n="check6">6. Prima di chiudere o spostare il telescopio, disattiva l'inseguimento.</div>
+          </div>
+        </div>
+
+        <!-- Troubleshooting Table (Page 24) -->
+        <div class="glass-card">
+          <div class="card-title">Risoluzione Problemi</div>
+          <div style="font-size: 12px; color: var(--text-muted); display: flex; flex-direction: column; gap: 10px;">
+            <div>
+              <strong style="color: var(--gold-light);">Telescopio non rilevato:</strong>
+              <div>Verifica alimentazione ESP32, raggio Bluetooth e permessi di geolocalizzazione dello smartphone.</div>
+            </div>
+            <div>
+              <strong style="color: var(--gold-light);">Pulsante grigio o occupato:</strong>
+              <div>Attendi il termine del movimento, dell'inseguimento o della calibrazione attiva.</div>
+            </div>
+            <div>
+              <strong style="color: var(--gold-light);">GoTo manca il bersaglio:</strong>
+              <div>Verifica i rapporti di riduzione, le direzioni assi, l'ora UTC e il centramento della stella di riferimento.</div>
+            </div>
+            <div>
+              <strong style="color: var(--gold-light);">Il bersaglio deriva durante l'inseguimento:</strong>
+              <div>Assicurati che il tracking sia attivo, ricontrolla il livellamento della base e la compensazione backlash.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Project & Legal Credits -->
+        <div class="glass-card text-center">
+          <div style="font-weight: 700; color: var(--gold-light);">CosmoPilot Project</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin: 6px 0;">PWA Versione 2.4 (Edizione 2026)</div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">Compatibile con firmware ESP32 ufficiale CosmoPilot_Firmware.</div>
+          <a href="https://cosmo-pilot.com" target="_blank" style="color: #38bdf8; font-size: 13px; text-decoration: none;">Visita il Sito Ufficiale (cosmo-pilot.com)</a>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ================= MODALS & POPUPS ================= -->
+
+    <!-- Target Detail & GoTo Modal Dialog -->
+    <div id="modal-target-detail" class="modal-backdrop">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <div id="modal-target-title" class="modal-title">Nome Oggetto</div>
+          <button class="modal-close-btn" onclick="appModals.close('modal-target-detail')">✕</button>
+        </div>
+
+        <div id="modal-target-body" style="font-size: 13px; margin-bottom: 16px;"></div>
+
+        <div style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 10px; padding: 10px; font-size: 12px; margin-bottom: 14px;" data-i18n="gotoNotice">
+          Controlla che l'area di movimento del telescopio sia libera da persone e cavi prima di muovere.
+        </div>
+
+        <button id="btn-modal-send-goto" class="btn-gold mb-2">
+          <span data-i18n="sendToTelescope">Invia al Telescopio</span>
+        </button>
+        <button class="btn-outline" onclick="appModals.close('modal-target-detail')">
+          <span data-i18n="cancel">Annulla</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Stop GoTo Progress Popup (Page 15) -->
+    <div id="modal-stop-goto" class="modal-backdrop">
+      <div class="modal-sheet text-center">
+        <div class="modal-title" style="margin-bottom: 10px;">Puntamento in Corso...</div>
+        <div style="font-size: 40px; margin: 16px 0; animation: spin-slow 4s infinite linear;">🔭</div>
+        <div id="stop-goto-target-text" style="font-size: 14px; font-weight: 600; color: var(--gold-light); margin-bottom: 16px;">Target</div>
+
+        <button id="btn-stop-goto-action" class="btn-gold btn-danger" style="height: 50px;">
+          <span data-i18n="stopGoto">Ferma GoTo</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Filters & Planning Modal (Page 16) -->
+    <div id="modal-filters" class="modal-backdrop">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <div class="modal-title" data-i18n="filters">Filtri e Visibilità</div>
+          <button class="modal-close-btn" onclick="appModals.close('modal-filters')">✕</button>
+        </div>
+
+        <div class="form-group slider-group">
+          <div class="slider-header">
+            <span data-i18n="maxMagnitude">Magnitudine Massima</span>
+            <span id="filter-mag-val" style="color: var(--gold-light);">8.0</span>
+          </div>
+          <input type="range" id="filter-mag-slider" class="custom-range" min="1.0" max="14.0" step="0.5" value="8.0">
+        </div>
+
+        <label style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+          <span style="font-size: 13px;" data-i18n="visibleOnly">Solo oggetti visibili (&gt;10° alt)</span>
+          <input type="checkbox" id="chk-filter-visible" style="width: 18px; height: 18px;">
+        </label>
+
+        <div style="font-size: 14px; font-weight: 700; color: var(--gold-light); margin-bottom: 8px;">Pianificazione Futura</div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="planningDate">Data di pianificazione</label>
+          <input type="date" id="filter-plan-date" class="form-input">
+        </div>
+
+        <div class="form-group slider-group">
+          <div class="slider-header">
+            <span data-i18n="planningTime">Orario di osservazione (30m)</span>
+            <span id="filter-time-val" style="color: var(--gold-light);">22:00</span>
+          </div>
+          <input type="range" id="filter-time-slider" class="custom-range" min="0" max="47" step="1" value="44">
+        </div>
+
+        <button id="btn-filter-choose-loc" class="btn-outline mb-2" data-i18n="chooseLocation">
+          Scegli Posizione
+        </button>
+
+        <button id="btn-filter-confirm" class="btn-gold" data-i18n="confirm">
+          Conferma
+        </button>
+      </div>
+    </div>
+
+    <!-- Custom Target Add / Edit Modal (Page 17) -->
+    <div id="modal-custom-target" class="modal-backdrop">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <div id="modal-custom-title" class="modal-title">Aggiungi Bersaglio</div>
+          <button class="modal-close-btn" onclick="appModals.close('modal-custom-target')">✕</button>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Nome Oggetto</label>
+          <input type="text" id="cust-name" class="form-input" placeholder="es. Cometa C/2023 A3">
+        </div>
+
+        <div class="coords-grid">
+          <div class="coord-cell"><div class="coord-cell-label">RA Ore</div><input type="number" id="cust-ra-h" class="coord-cell-input" value="0"></div>
+          <div class="coord-cell"><div class="coord-cell-label">RA Min</div><input type="number" id="cust-ra-m" class="coord-cell-input" value="0"></div>
+          <div class="coord-cell"><div class="coord-cell-label">RA Sec</div><input type="number" id="cust-ra-s" class="coord-cell-input" value="0"></div>
+        </div>
+
+        <div class="coords-grid">
+          <div class="coord-cell"><div class="coord-cell-label">DEC Deg</div><input type="text" id="cust-dec-d" class="coord-cell-input" value="0"></div>
+          <div class="coord-cell"><div class="coord-cell-label">DEC Min</div><input type="number" id="cust-dec-m" class="coord-cell-input" value="0"></div>
+          <div class="coord-cell"><div class="coord-cell-label">DEC Sec</div><input type="number" id="cust-dec-s" class="coord-cell-input" value="0"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Magnitudine</label>
+          <input type="number" step="0.1" id="cust-mag" class="form-input" value="8.0">
+        </div>
+
+        <button id="btn-save-custom-target" class="btn-gold" data-i18n="save">Salva</button>
+      </div>
+    </div>
+
+    <!-- Fullscreen Wallpaper Preview -->
+    <div id="wallpaper-preview-full" class="wallpaper-preview-full">
+      <div style="display: flex; justify-content: flex-end;">
+        <button class="btn-outline" style="width: auto; padding: 6px 14px; background: rgba(0,0,0,0.7);" onclick="settingsWorkflow.closePreview()">✕ Chiudi</button>
+      </div>
+      <div class="wallpaper-preview-hint">Tocca ovunque per uscire dall'anteprima</div>
+    </div>
+
+  </div>
+
+  <!-- Application Scripts -->
+  <script src="js/astronomy.browser.min.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/ble-controller.js"></script>
+  <script src="js/astronomy-service.js"></script>
+  <script src="js/catalog-service.js"></script>
+  <script src="js/tours-service.js"></script>
+  <script src="js/game-service.js"></script>
+  <script src="js/settings-service.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
